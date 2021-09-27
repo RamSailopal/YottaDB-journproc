@@ -32,3 +32,42 @@ Execution with no options (as above) will output all entries from the yottadb.mj
 
 
      Note that the use of --commit will ignore --type and focus only on activity type SET and type KILL
+     
+# Commit option example use case
+
+A global gets set up with the following entry:
+
+     Set ^YOTTATXT("hello")="world"
+
+The global then gets inadvertedly deleted with:
+
+     Kill ^YOTTATXT
+     
+The global can be recovered by doing the following:
+
+     journproc --glob="YOTTATXT" --commit
+  
+     2021-09-27 14:45:25     SET     ^YOTTATXT("hello")="world"
+     2021-09-27 14:45:25     KILL    ^YOTTATXT
+ 
+
+     journal commit log has been saved to /tmp/journcommit
+
+     Amend as required and then run:
+
+     ydb < /tmp/journcommit
+     
+ The file **/tmp/journcommit** contains the following entries:
+ 
+     Set ^YOTTATXT("hello")="world"
+     Kill ^YOTTATXT
+     
+We need to remove the inadvertent Kill execution to recover the global by editting the file and once we have done this, we can commit the changes to the YDB database by running:
+
+     ydb < /tmp/journcommit
+
+     
+    
+     
+
+     
