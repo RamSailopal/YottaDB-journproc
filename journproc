@@ -1,0 +1,128 @@
+#!/usr/bin/python3
+#	AUTHOR - Raman Sailopal
+#
+#	Python utility to extract data from YottaDB journal files based on global, type of YottaDB activity and start/end dates)
+#
+import subprocess
+import datetime
+import getopt
+import sys
+import os
+from dateutil.parser import parse
+typ=""
+glob=""
+start=""
+end=""
+commit="n"
+fil="yottadb.mjl"
+if (os.environ.get('journpath')==None):
+   print("\n\njournpath (path to journal files) environment variable has not been set\n\n")
+   sys.exit(1)
+if (os.environ.get('ydb_dist')==None):
+   print("\n\nydb_dist (path to mupip exe) environment variable has not been set\n\n")
+   sys.exit(1)
+try:
+   options, remainder = getopt.getopt(sys.argv[1:], 's:e:t:g:f:c', ['start=', 
+                                                         'end=',
+                                                         'type=',
+                                                         'glob=',
+                                                         'file=',
+                                                         'commit',
+                                                         ])
+except:
+   print("\n\nInvalid option - valid options end(end date/time), start(start date/time), glob(Global to search on), file(journal file to process), type(Journal activity to search for i.e SET or KILL), commit(Write all sets and kills to a commit file ready for processing by YDB)\n\n")
+   sys.exit(1)
+for opt, arg in options:
+    if opt in ('-s', '--start'):
+        start = arg
+    elif opt in ('-e', '--end'):
+        end = arg
+    elif opt == '--type':
+        typ = arg
+    elif opt == '--glob':
+        glob = arg
+    elif opt == '--file':
+        fil = arg
+    elif opt == '--start':
+        start = arg
+    elif opt == '--end':
+        end = arg
+    elif opt == '--commit':
+        commit = "y"
+cmd="rm -f /tmp/journcommit"
+process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+result = process.communicate()
+if typ == "":
+   typ="all"
+if glob == "":
+   glob="all"
+if (start != ""):
+   if (len(start)==10):
+      start=start + " 00:00:00"
+   elif (len(start)==16):
+      start=start + ":00"
+   try:
+        parse(start, fuzzy="False")
+
+   except ValueError:
+        print("\n\nStart date/time is in the wrong format - YYYY-MM-DD HH:MM:SS\n\n")
+        sys.exit(1)
+   startd=start.split(" ")
+   startp=startd[0].split("-")
+   startt=startd[1].split(":")
+   start=datetime.datetime(int(startp[0]), int(startp[1]), int(startp[2]), int(startt[0]), int(startt[1]), int(startt[2]))
+else:
+   start=datetime.datetime(1840, 12, 31, 00, 00)
+if (end != ""):
+   if (len(end)==10):
+      end=end + " 00:00:00"
+   elif (len(end)==16):
+      end=end + ":00"
+
+   try: 
+        parse(end, fuzzy="False")
+   except ValueError:
+        print("\n\nEnd date/time is in the wrong format - YYYY-MM-DD HH:MM:SS\n\n")
+        sys.exit(1)
+   endd=end.split(" ")
+   endp=endd[0].split("-")
+   endt=endd[1].split(":")
+   end=datetime.datetime(int(endp[0]), int(endp[1]), int(endp[2]), int(endt[0]), int(endt[1]), int(endt[2]))
+else:
+   end=datetime.datetime.now()
+cmd=os.environ.get('ydb_dist') + "/mupip journal -extract=/tmp/journalout.txt -detail -forward " + os.environ.get('journpath') + "/" + fil
+process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+result = process.communicate()
+cmd="awk -F '\\' 'NR==1 {next} { split($1,parts,\" \") } parts[4]==\"SET\" || parts[4]==\"KILL\" { print parts[4]\"#?@#\"$2\"#?@#\"$NF;next } { print parts[4]\" \"$2\" -\" }' /tmp/journalout.txt"
+process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+result = process.communicate()
+lines=result[0].decode('utf-8').split('\n')
+if (commit=="y"):
+   f = open("/tmp/journcommit","a")
+for x in lines:
+   y=x.split("#?@#")
+   if (len(y) > 1):
+     dattim=y[1].split(",")
+     dat=dattim[0]
+     tim=dattim[1]
+     horos=datetime.datetime(1840, 12, 31, 00, 00, 00)
+     EndDate = horos + datetime.timedelta(days=int(dat))
+     EndDate = EndDate + datetime.timedelta(seconds=int(tim))
+     if ((typ==y[0] or typ=="all") and (glob=="all" or y[2].find("^" + glob)==0 ) and (start=="" and end=="")):
+        print(str(EndDate) + "\t" + y[0]  + "\t" + y[2])
+        if ((y[0]=="SET") and (commit=="y")):
+           f.write("Set " + y[2] + "\n")
+        elif ((y[0]=="KILL") and (commit=="y")):
+           f.write("Kill " + y[2] + "\n")
+     elif ((typ==y[0] or typ=="all") and (glob=="all" or y[2].find("^" + glob)==0 ) and (EndDate>=start and EndDate<=end)):
+        print(str(EndDate) + "\t" + y[0]  + "\t" + y[2])
+        if (y[0]=="SET" and commit=="y"):
+           f.write("Set " + y[2] + "\n")
+        elif (y[0]=="KILL" and commit=="y"):
+           f.write("Kill " + y[2] + "\n")
+if (commit=="y"):
+   f.close()
+   print("\n\njournal commit log has been saved to /tmp/journcommit\n\nAmend as required and then run:\n\nydb < /tmp/journcommit\n\n")
+cmd="rm -f /tmp/journalout.txt"
+process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+result = process.communicate()
