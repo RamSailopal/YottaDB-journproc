@@ -23,8 +23,8 @@ Execution with no options (as above) will output all entries from the yottadb.mj
 
      --glob - Search for a specific global
      --type - The type of journal activity to search for i.e. SETS or KILLS.
-     --start - The Date/Time to search from
-     --end - The Date/Time to search to
+     --start - The Date/Time to search from i.e. 2021-09-27 08:34:00
+     --end - The Date/Time to search to i.e. 2021-09-27 08:34:00
      --file - An alternate journal file name i.e yottadb.mjl_2021250130325
      --commit - Commit any SETS and KILLS to a commit log located at /tmp/journcommit. This can later be amended as required and committed to YDB with:
 
